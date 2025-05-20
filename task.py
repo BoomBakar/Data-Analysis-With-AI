@@ -2,16 +2,17 @@ import mysql.connector
 import requests
 import streamlit as st
 import pandas as pd
+from dotenv import load_dotenv
+import os
 
-
-GROQ_API_KEY = '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'
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 #MODEL = 'llama-3.1-8b-instant'
 MODEL = 'llama-3.3-70b-versatile'
-MYSQL_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'XvrLhr123',
-    'database': 'cars'
+db_config = {
+    "host": os.getenv("DB_HOST"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "database": os.getenv("DB_NAME")
 }
 
 # Step 1: Connect to MySQL
