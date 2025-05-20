@@ -5,9 +5,11 @@ import pandas as pd
 from dotenv import load_dotenv
 import os
 
+load_dotenv() 
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 #MODEL = 'llama-3.1-8b-instant'
-MODEL = 'llama-3.3-70b-versatile'
+#MODEL = 'llama-3.3-70b-versatile'
 db_config = {
     "host": os.getenv("DB_HOST"),
     "user": os.getenv("DB_USER"),
@@ -71,7 +73,7 @@ def results_to_english(question, columns, rows):
 
 Question: {question}
 Table Result: {table_data}
-Answer in plain English:"""
+Answer in plain English. Keep it precise and concise:"""
 
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
@@ -119,6 +121,13 @@ db_schema_string = fetch_db_schema(cursor, db_name)
 
 # Get user input
 question = st.text_input("Ask a question about the database:")
+
+# Dropdown for selecting the model
+MODEL = st.selectbox(
+    "Choose an LLM model:",
+    ["llama-3.1-8b-instant", "llama-3.3-70b-versatile","gemma2-9b-it"],
+    index=0  # default selection
+)
 
 if st.button("Ask"):
     with st.spinner("Thinking..."):

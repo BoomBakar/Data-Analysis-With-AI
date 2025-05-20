@@ -5,6 +5,8 @@ import pandas as pd
 from dotenv import load_dotenv
 import os
 
+load_dotenv()
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 #MODEL = 'llama-3.1-8b-instant'
 MODEL = 'llama-3.3-70b-versatile'
@@ -88,7 +90,7 @@ def results_to_english(question, columns, rows):
 
 Question: {question}
 Table Result: {table_data}
-Answer in plain English:"""
+Answer in plain English. Keep it precise and concise:"""
 
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
