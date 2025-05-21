@@ -113,14 +113,14 @@ def fetch_db_schema(cursor, db_name):
 
 def get_viz_plan(question, df):
     sample = df.head(5).to_dict(orient="records")
-    print(sample)
     prompt = f"""
     You are a data analyst. Based on this question and data sample, suggest a visualization.
     Question: {question}
     Sample: {sample}
-    Example Return JSON: {{ "chart_type": "bar", "x_axis": "brand", "y_axis": "car_count" }}.
-    If not suitable for chart, return {{"chart_type": "none"}}.
-    """
+    Only use the actual column names visible in the sample.
+    Return only valid JSON like: {{ "chart_type": "bar", "x_axis": "brand", "y_axis": "price" }}
+    Only return JSON, no extra text. If no chart applies, return: {{ "chart_type": "none" }}"""
+    
     response = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={
@@ -144,38 +144,22 @@ def render_chart(df, plan):
     chart_type = plan.get("chart_type")
     x = plan.get("x_axis")
     y = plan.get("y_axis")
+
+    if x not in df.columns or (chart_type != "pie" and y not in df.columns):
+        st.warning("Cannot generate chart: specified columns not found in data.")
+        return
+
     if chart_type == "bar":
         st.plotly_chart(px.bar(df, x=x, y=y))
     elif chart_type == "line":
         st.plotly_chart(px.line(df, x=x, y=y))
     elif chart_type == "pie":
-        st.plotly_chart(px.pie(df, names=x, values=y))
+        if y in df.columns:
+            st.plotly_chart(px.pie(df, names=x, values=y))
+        else:
+            st.warning("Cannot generate pie chart: values column not found.")
     else:
         st.write("No chart applicable.")
-def draw_chart(columns, rows):
-    if not rows or not columns:
-        st.warning("No data to display.")
-        return
-
-    df = pd.DataFrame(rows, columns=columns)
-
-    # Try to detect numeric columns
-    numeric_cols = df.select_dtypes(include='number').columns.tolist()
-    non_numeric_cols = [col for col in df.columns if col not in numeric_cols]
-
-    if len(numeric_cols) == 0:
-        st.info("No suitable chart found (no numeric data).")
-        return
-
-    # If there's one numeric column and one categorical, show a bar chart
-    if len(numeric_cols) == 1 and len(non_numeric_cols) == 1:
-        st.bar_chart(df.set_index(non_numeric_cols[0])[numeric_cols[0]])
-    # If two numeric columns, use a line chart
-    elif len(numeric_cols) >= 2:
-        st.line_chart(df[numeric_cols])
-    # If more than one categorical, fallback to table or mention unsupported
-    else:
-        st.info("No suitable chart found for this data.")
 
 st.title("🚗 Car Database Q&A with AI")
 
