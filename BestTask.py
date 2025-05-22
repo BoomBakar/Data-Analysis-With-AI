@@ -181,7 +181,7 @@ def save_to_history(question, sql_query, answer, chart_plan):
 
 st.title("🚗 Car Database Q&A with AI")
 
-db_name = 'cars'  # replace with your DB name
+db_name = os.getenv("DB_NAME")  # replace with your DB name
 cursor = db.cursor()
 
 # Fetch schema only once per app run
@@ -222,7 +222,7 @@ if st.button("Ask"):
                 st.info("No suitable chart found for this data.")
 
             save_to_history(question, sql, summary, plan)
-            st.success("Query and visualization saved to history.")
+            st.success("Query saved to history.")
 
 
         except Exception as e:
@@ -234,18 +234,29 @@ with st.sidebar:
     cursor = conn.cursor()
     cursor.execute("SELECT id, question, created_at FROM query_history ORDER BY created_at DESC LIMIT 10")
     rows = cursor.fetchall()
+
     for row in rows:
         qid, qtext, ts = row
-        if st.button(f"{ts.strftime('%Y-%m-%d %H:%M')} — {qtext[:30]}...", key=qid):
-            # Fetch and display full result
-            cur2 = conn.cursor()
-            cur2.execute("SELECT question, sql_query, answer, chart_type, x_axis, y_axis FROM query_history WHERE id = %s", (qid,))
-            qrow = cur2.fetchone()
-            if qrow:
-                st.subheader("🕘 History Result")
-                st.write("**Question:**", qrow[0])
-                st.write("**Answer:**", qrow[2])
-                
-            cur2.close()
+        col1, col2 = st.columns([0.85, 0.15])  # Layout: question | 🗑️
+        with col1:
+            if st.button(f"{ts.strftime('%Y-%m-%d %H:%M')} — {qtext[:30]}...", key=f"q_{qid}"):
+                # Fetch and display full result or trigger main screen display
+                st.session_state['selected_qid'] = qid  # Optional for interaction
+        with col2:
+            if st.button("🗑️", key=f"del_{qid}"):
+                delete_query = "DELETE FROM query_history WHERE id = %s"
+                cursor.execute(delete_query, (qid,))
+                conn.commit()
+                st.rerun()  # Refresh UI
+    if st.button("🧹 Clear All History"):
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM query_history")
+        conn.commit()
+        st.success("All history deleted.")
+        st.rerun()
+
     cursor.close()
     conn.close()
+        
+
+
