@@ -161,6 +161,24 @@ def render_chart(df, plan):
     else:
         st.write("No chart applicable.")
 
+def save_to_history(question, sql_query, answer, chart_plan):
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+
+    chart_type = chart_plan.get("chart_type", "none")
+    x_axis = chart_plan.get("x_axis", None)
+    y_axis = chart_plan.get("y_axis", None)
+
+    query = """
+        INSERT INTO query_history (question, sql_query, answer, chart_type, x_axis, y_axis)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """
+    cursor.execute(query, (question, sql_query, answer, chart_type, x_axis, y_axis))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
 st.title("🚗 Car Database Q&A with AI")
 
 db_name = 'cars'  # replace with your DB name
@@ -203,6 +221,31 @@ if st.button("Ask"):
             else:
                 st.info("No suitable chart found for this data.")
 
+            save_to_history(question, sql, summary, plan)
+            st.success("Query and visualization saved to history.")
+
 
         except Exception as e:
             st.error(f"Error: {e}")
+
+with st.sidebar:
+    st.header("📚 Query History")
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, question, created_at FROM query_history ORDER BY created_at DESC LIMIT 10")
+    rows = cursor.fetchall()
+    for row in rows:
+        qid, qtext, ts = row
+        if st.button(f"{ts.strftime('%Y-%m-%d %H:%M')} — {qtext[:30]}...", key=qid):
+            # Fetch and display full result
+            cur2 = conn.cursor()
+            cur2.execute("SELECT question, sql_query, answer, chart_type, x_axis, y_axis FROM query_history WHERE id = %s", (qid,))
+            qrow = cur2.fetchone()
+            if qrow:
+                st.subheader("🕘 History Result")
+                st.write("**Question:**", qrow[0])
+                st.write("**Answer:**", qrow[2])
+                
+            cur2.close()
+    cursor.close()
+    conn.close()
