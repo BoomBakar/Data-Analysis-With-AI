@@ -114,7 +114,7 @@ def fetch_db_schema(cursor, db_name):
 def get_viz_plan(question, df):
     sample = df.head(5).to_dict(orient="records")
     prompt = f"""
-    You are a data analyst. Based on this question and data sample, suggest a visualization.
+    You are a data analyst. Based on this question and data sample, suggest a visualization, either bar or line chart only.
     Question: {question}
     Sample: {sample}
     Only use the actual column names visible in the sample.
@@ -153,11 +153,7 @@ def render_chart(df, plan):
         st.plotly_chart(px.bar(df, x=x, y=y))
     elif chart_type == "line":
         st.plotly_chart(px.line(df, x=x, y=y))
-    elif chart_type == "pie":
-        if y in df.columns:
-            st.plotly_chart(px.pie(df, names=x, values=y))
-        else:
-            st.warning("Cannot generate pie chart: values column not found.")
+    
     else:
         st.write("No chart applicable.")
 
@@ -240,8 +236,13 @@ with st.sidebar:
         col1, col2 = st.columns([0.85, 0.15])  # Layout: question | 🗑️
         with col1:
             if st.button(f"{ts.strftime('%Y-%m-%d %H:%M')} — {qtext[:30]}...", key=f"q_{qid}"):
-                # Fetch and display full result or trigger main screen display
-                st.session_state['selected_qid'] = qid  # Optional for interaction
+                cur2 = conn.cursor()
+                cur2.execute("SELECT question, sql_query, answer, chart_type, x_axis, y_axis FROM query_history WHERE id = %s", (qid,))
+                qrow = cur2.fetchone()
+                if qrow:                      
+                    st.subheader("🕘 History Result")
+                    st.write("**Question:**", qrow[0])
+                    st.write("**Answer:**", qrow[2])
         with col2:
             if st.button("🗑️", key=f"del_{qid}"):
                 delete_query = "DELETE FROM query_history WHERE id = %s"
