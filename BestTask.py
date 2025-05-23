@@ -91,7 +91,10 @@ Answer in plain English. Keep it precise and concise:"""
 
     return response.json()['choices'][0]['message']['content'].strip()
 
-def fetch_db_schema(cursor, db_name):
+def fetch_db_schema(cursor, db_name, exclude_tables=None):
+    if exclude_tables is None:
+        exclude_tables = []
+
     query = """
         SELECT table_name, column_name
         FROM information_schema.columns
@@ -103,6 +106,8 @@ def fetch_db_schema(cursor, db_name):
 
     schema = {}
     for table, column in rows:
+        if table in exclude_tables:
+            continue
         schema.setdefault(table, []).append(column)
 
     schema_str = ""
@@ -110,6 +115,7 @@ def fetch_db_schema(cursor, db_name):
         schema_str += f"Table {table}({', '.join(columns)})\n"
 
     return schema_str.strip()
+
 
 def get_viz_plan(question, df):
     sample = df.head(5).to_dict(orient="records")
@@ -181,7 +187,8 @@ db_name = os.getenv("DB_NAME")  # replace with your DB name
 cursor = db.cursor()
 
 # Fetch schema only once per app run
-db_schema_string = fetch_db_schema(cursor, db_name)
+db_schema_string = fetch_db_schema(cursor, db_name, exclude_tables=["query_history"])
+
 
 # Get user input
 question = st.text_input("Ask a question about the database:")
