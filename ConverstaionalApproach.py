@@ -79,6 +79,8 @@ chain = prompt | llm
 
 # Streamlit UI
 st.set_page_config(page_title="AI DB Analyst", layout="wide")
+
+
 st.title("🧠 Conversational AI Data Analyst")
 st.markdown("Ask natural language questions about your database.")
 
@@ -152,9 +154,13 @@ Provide the SQL and answer.
                 st.dataframe(result["rows"], use_container_width=True)
                 st.success("**Plain English Summary:** " + summary)
 
+
+if st.sidebar.button("🗑️ Clear History"):
+    st.session_state.chat_history = []
+
 # Show history
 st.sidebar.title("💬 Chat History")
 for u, a in st.session_state.chat_history:
     st.sidebar.markdown(f"**You:** {u}")
     st.sidebar.markdown(f"**AI:** {summary}")
-    
+
