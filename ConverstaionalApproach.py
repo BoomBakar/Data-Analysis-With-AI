@@ -113,9 +113,11 @@ Provide the SQL and answer.
             if "error" not in result:
                 summary_prompt = ChatPromptTemplate.from_messages([
                     ("system", "You are a helpful assistant who explains database results in plain English."
-                    "Your job is to convert the DB result into a simple, understandable and short summary."),
+                    "Your job is to convert the DB result into a simple, understandable and short summary."
+                    "Don't give any headings or titles, just a concise summary."),
                     ("user", f"""Given the SQL query and the first few result rows, explain the result in simple terms.
                      Your job is to convert the DB result into a simple, understandable and short summary.
+                     Do not give any headings or titles, just a concise summary.
 
                     SQL Query:
                     {sql_query}
