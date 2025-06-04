@@ -34,10 +34,11 @@ if "db_setup_done" not in st.session_state:
 # Sidebar tab selection
 st.sidebar.title("💬 Chats")
 chat_ids = list(st.session_state.conversations.keys())
-selected_chat = st.sidebar.radio(
+selected_chat = st.sidebar.selectbox(
     "Select a chat:",
     options=chat_ids + ["➕ New Chat"],
     index=chat_ids.index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_ids else len(chat_ids),
+    format_func=lambda x: x if x != "➕ New Chat" else "➕ New Chat",
 )
 
 if selected_chat == "➕ New Chat":
@@ -63,9 +64,16 @@ if selected_chat == "➕ New Chat":
             conn.commit()
 
             # Extract visible DB name
-            visible_name = re.findall(r"CREATE DATABASE IF NOT EXISTS ([^;]+)", content, re.IGNORECASE)
-            visible_name = visible_name[0] if visible_name else db_name
+            visible_name = re.findall(r"CREATE DATABASE(?: IF NOT EXISTS)? ([^;\s]+)", content, re.IGNORECASE)
+            visible_name = visible_name[0] if visible_name else uploaded_file.name.split(".")[0]
             chat_title = visible_name.strip() + " Chat"
+
+            # Ensure unique chat title
+            original_title = chat_title
+            counter = 1
+            while chat_title in st.session_state.conversations:
+                chat_title = f"{original_title} ({counter})"
+                counter += 1
 
             # Create conversation
             st.session_state.conversations[chat_title] = {
@@ -140,7 +148,7 @@ Provide the SQL and answer.
             if sql_match:
                 sql_query = sql_match.group(1).strip()
                 result = run_sql_query(conn, sql_query)
-                preview_rows = result["rows"][:5] if "rows" in result else []
+                preview_rows = result["rows"][:] if "rows" in result else []
                 if "error" not in result:
                     summary_prompt = ChatPromptTemplate.from_messages([
                         ("system", "You are a helpful assistant who explains database results in plain English. Your job is to convert the DB result into a simple, understandable and short summary. Don't give any headings or titles, just a concise summary."),
