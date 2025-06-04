@@ -6,13 +6,10 @@ import mysql.connector
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnableSequence
 from langchain_groq import ChatGroq
 from langchain.memory import ConversationBufferMemory
 import re
-import tempfile
 import uuid
-import time
 
 load_dotenv()
 
@@ -36,16 +33,18 @@ if "db_setup_done" not in st.session_state:
 
 # Sidebar tab selection
 st.sidebar.title("💬 Chats")
+chat_ids = list(st.session_state.conversations.keys())
 selected_chat = st.sidebar.radio(
     "Select a chat:",
-    options=list(st.session_state.conversations.keys()) + ["➕ New Chat"],
-    index=0 if st.session_state.current_chat_id else len(st.session_state.conversations),
+    options=chat_ids + ["➕ New Chat"],
+    index=chat_ids.index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_ids else len(chat_ids),
 )
 
 if selected_chat == "➕ New Chat":
     uploaded_file = st.file_uploader("Upload your MySQL .sql file", type=["sql"])
 
     if uploaded_file and not st.session_state.db_setup_done:
+        content = uploaded_file.read().decode("utf-8", errors="ignore")
         db_name = f"temp_db_{uuid.uuid4().hex[:8]}"
         conn = mysql.connector.connect(host=MYSQL_HOST, user=MYSQL_USER, password=MYSQL_PASSWORD)
         cursor = conn.cursor()
@@ -53,21 +52,22 @@ if selected_chat == "➕ New Chat":
         try:
             cursor.execute(f"CREATE DATABASE {db_name}")
             conn.database = db_name
-
-            content = uploaded_file.read().decode("utf-8", errors="ignore")
+            cursor.execute("SET foreign_key_checks = 0;")
             for command in re.split(r';\s*\n', content):
                 if command.strip():
                     try:
                         cursor.execute(command)
-                    except Exception as e:
-                        pass  # ignore broken lines
+                    except:
+                        continue
+            cursor.execute("SET foreign_key_checks = 1;")
             conn.commit()
 
-            # Get visible DB name from .sql
+            # Extract visible DB name
             visible_name = re.findall(r"CREATE DATABASE IF NOT EXISTS ([^;]+)", content, re.IGNORECASE)
-            visible_name = visible_name[0] if visible_name else "Unnamed"
+            visible_name = visible_name[0] if visible_name else db_name
             chat_title = visible_name.strip() + " Chat"
 
+            # Create conversation
             st.session_state.conversations[chat_title] = {
                 "db_name": db_name,
                 "conn": conn,
@@ -82,19 +82,22 @@ if selected_chat == "➕ New Chat":
         except Exception as e:
             st.error(f"Failed to set up DB: {e}")
 else:
-    st.session_state.db_setup_done = False
     st.session_state.current_chat_id = selected_chat
+    st.session_state.db_setup_done = False
 
 if st.session_state.current_chat_id:
     convo = st.session_state.conversations[st.session_state.current_chat_id]
     conn = convo["conn"]
 
+    # --- Schema ---
     if not convo["schema"]:
         cursor = conn.cursor()
         cursor.execute("SHOW TABLES;")
         tables = cursor.fetchall()
         schema = ""
         for (table,) in tables:
+            if table == "query_history":
+                continue  # skip custom history table
             schema += f"\nTable: {table}\n"
             cursor.execute(f"DESCRIBE {table};")
             columns = cursor.fetchall()
@@ -102,14 +105,23 @@ if st.session_state.current_chat_id:
                 schema += f" - {col[0]} ({col[1]})\n"
         convo["schema"] = schema.strip()
 
+    # --- LLM Setup ---
     llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
-
     prompt = ChatPromptTemplate.from_messages([
         ("system", f"""You are a helpful data analyst AI. Use the following database schema to answer questions by generating correct SQL queries.\n\nSchema:\n{convo['schema']}\n\nOnly use the columns and tables shown in the schema above. Do not guess or make up columns."""),
         ("user", "{input}"),
     ])
-
     chain = prompt | llm
+
+    def run_sql_query(conn, query):
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            cols = [desc[0] for desc in cursor.description]
+            return {"columns": cols, "rows": rows}
+        except Exception as e:
+            return {"error": str(e)}
 
     user_input = st.chat_input("Ask a question about your data")
     if user_input:
@@ -124,24 +136,11 @@ New Question: {user_input}
 Provide the SQL and answer.
 """
             llm_response = chain.invoke({"input": context_prompt}).content.strip()
-
             sql_match = re.search(r"```sql\n(.*?)```", llm_response, re.DOTALL)
             if sql_match:
                 sql_query = sql_match.group(1).strip()
-
-                def run_sql_query(conn, query):
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute(query)
-                        rows = cursor.fetchall()
-                        cols = [desc[0] for desc in cursor.description]
-                        return {"columns": cols, "rows": rows}
-                    except Exception as e:
-                        return {"error": str(e)}
-
                 result = run_sql_query(conn, sql_query)
-                preview_rows = result["rows"][:] if "rows" in result else []
-
+                preview_rows = result["rows"][:5] if "rows" in result else []
                 if "error" not in result:
                     summary_prompt = ChatPromptTemplate.from_messages([
                         ("system", "You are a helpful assistant who explains database results in plain English. Your job is to convert the DB result into a simple, understandable and short summary. Don't give any headings or titles, just a concise summary."),
