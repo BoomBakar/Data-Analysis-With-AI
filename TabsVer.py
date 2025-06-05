@@ -10,7 +10,6 @@ from langchain_groq import ChatGroq
 from langchain.memory import ConversationBufferMemory
 import re
 import uuid
-import atexit
 
 load_dotenv()
 
@@ -19,22 +18,6 @@ MYSQL_HOST = os.getenv("DB_HOST")
 MYSQL_USER = os.getenv("DB_USER")
 MYSQL_PASSWORD = os.getenv("DB_PASSWORD")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-# Track temporary databases for cleanup
-# temp_dbs = []
-
-# def cleanup_temp_dbs():
-#     print("Cleaning up temporary databases...")
-#     for db_name in temp_dbs:
-#         try:
-#             conn = mysql.connector.connect(host=MYSQL_HOST, user=MYSQL_USER, password=MYSQL_PASSWORD)
-#             cursor = conn.cursor()
-#             cursor.execute(f"DROP DATABASE IF EXISTS {db_name}")
-#             conn.close()
-#         except:
-#             pass
-
-# atexit.register(cleanup_temp_dbs)
 
 # Initialize Streamlit app
 st.set_page_config(page_title="AI DB Analyst", layout="wide")
@@ -50,8 +33,26 @@ if "db_setup_done" not in st.session_state:
 
 # Sidebar tab selection
 st.sidebar.title("💬 Chats")
+
+# Delete chat button
+delete_disabled = st.session_state.current_chat_id is None or st.session_state.current_chat_id == "➕ New Chat"
+if st.sidebar.button("🗑️ Delete Current Chat", disabled=delete_disabled):
+    chat_id = st.session_state.current_chat_id
+    if chat_id and chat_id in st.session_state.conversations:
+        try:
+            conn = st.session_state.conversations[chat_id]["conn"]
+            db_name = st.session_state.conversations[chat_id]["db_name"]
+            cursor = conn.cursor()
+            cursor.execute(f"DROP DATABASE IF EXISTS {db_name}")
+            conn.close()
+        except:
+            pass
+        del st.session_state.conversations[chat_id]
+        st.session_state.current_chat_id = None
+        st.rerun()
+
 chat_ids = list(st.session_state.conversations.keys())
-selected_chat = st.sidebar.selectbox(
+selected_chat = st.sidebar.radio(
     "Select a chat:",
     options=chat_ids + ["➕ New Chat"],
     index=chat_ids.index(st.session_state.current_chat_id) if st.session_state.current_chat_id in chat_ids else len(chat_ids),
@@ -63,7 +64,6 @@ if selected_chat == "➕ New Chat":
     if uploaded_file and not st.session_state.db_setup_done:
         content = uploaded_file.read().decode("utf-8", errors="ignore")
         db_name = f"temp_db_{uuid.uuid4().hex[:8]}"
-        temp_dbs.append(db_name)
         conn = mysql.connector.connect(host=MYSQL_HOST, user=MYSQL_USER, password=MYSQL_PASSWORD)
         cursor = conn.cursor()
 
@@ -80,12 +80,9 @@ if selected_chat == "➕ New Chat":
             cursor.execute("SET foreign_key_checks = 1;")
             conn.commit()
 
-            # Extract visible DB name
-            visible_name = re.findall(r"CREATE DATABASE IF NOT EXISTS ([^;]+)", content, re.IGNORECASE)
-            if not visible_name:
-                visible_name = re.findall(r"USE ([^;]+)", content, re.IGNORECASE)
-            visible_name = visible_name[0] if visible_name else uploaded_file.name.replace(".sql", "")
-            chat_title = visible_name.strip() + " Chat"
+            # Use file name as chat title
+            file_base_name = os.path.splitext(uploaded_file.name)[0]
+            chat_title = file_base_name.strip() + " Chat"
 
             # Create conversation
             st.session_state.conversations[chat_title] = {
