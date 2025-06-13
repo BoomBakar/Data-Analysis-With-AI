@@ -122,10 +122,15 @@ if st.session_state.current_chat_id:
                 schema += f" - {col[0]} ({col[1]})\n"
         convo["schema"] = schema.strip()
 
+    # --- Sidebar Schema Viewer ---
+    with st.sidebar.expander("📚 Database Schema", expanded=False):
+        st.text(convo["schema"])
+
+
     # --- LLM Setup ---
     llm = ChatGroq(groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile")
     prompt = ChatPromptTemplate.from_messages([
-        ("system", f"""You are a helpful data analyst AI. Use the following database schema to answer questions by generating correct SQL queries.\n\nSchema:\n{convo['schema']}\n\nOnly use the columns and tables shown in the schema above. Do not guess or make up columns."""),
+        ("system", f"""You are a helpful data analyst AI. Use the following database schema to answer questions by generating correct SQL queries.\n\nSchema:\n{convo['schema']}\n\nOnly use the columns and tables shown in the schema above. Do not guess or make up columns. Do not give long explanations, just give the SQL query."""),
         ("user", "{input}"),
     ])
     chain = prompt | llm
