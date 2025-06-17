@@ -11,6 +11,7 @@ from langchain.memory import ConversationBufferMemory
 import re
 import uuid
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 import tempfile
 import json
 import pandas as pd
@@ -61,15 +62,14 @@ def generate_pdf(chat_id, chat_history):
     pdf.set_font("Arial", "", 12)
     for i, (user, ai) in enumerate(chat_history, 1):
         pdf.set_text_color(0)
-        pdf.multi_cell(0, 10, f"{i}. You: {user}", ln=True)
+        pdf.multi_cell(0, 10, f"{i}. You: {user}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_text_color(100, 100, 255)
-        pdf.multi_cell(0, 10, f"   AI: {ai}", ln=True)
+        pdf.multi_cell(0, 10, f"   AI: {ai}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.ln(2)
 
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     pdf.output(temp_file.name)
     return temp_file.name
-
 
 chat_ids = list(st.session_state.conversations.keys())
 selected_chat = st.sidebar.radio(
