@@ -10,6 +10,8 @@ from langchain_groq import ChatGroq
 from langchain.memory import ConversationBufferMemory
 import re
 import uuid
+from fpdf import FPDF
+import tempfile
 import json
 import pandas as pd
 
@@ -47,6 +49,27 @@ if st.sidebar.button("🗑️ Delete Current Chat", disabled=delete_disabled):
         del st.session_state.conversations[chat_id]
         st.session_state.current_chat_id = None
         st.rerun()
+
+def generate_pdf(chat_id, chat_history):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, f"Conversation: {chat_id}", ln=True)
+    pdf.ln(5)
+
+    pdf.set_font("Arial", "", 12)
+    for i, (user, ai) in enumerate(chat_history, 1):
+        pdf.set_text_color(0)
+        pdf.multi_cell(0, 10, f"{i}. You: {user}", ln=True)
+        pdf.set_text_color(100, 100, 255)
+        pdf.multi_cell(0, 10, f"   AI: {ai}", ln=True)
+        pdf.ln(2)
+
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    pdf.output(temp_file.name)
+    return temp_file.name
+
 
 chat_ids = list(st.session_state.conversations.keys())
 selected_chat = st.sidebar.radio(
@@ -230,6 +253,15 @@ if st.session_state.current_chat_id:
                         st.warning("📉 Chart could not be created due to parsing error.")
 
     st.sidebar.subheader("Conversation History")
+    if convo["chat_history"]:
+        pdf_path = generate_pdf(st.session_state.current_chat_id, convo["chat_history"])
+        with open(pdf_path, "rb") as f:
+            st.sidebar.download_button(
+                label="📄 Download Conversation as PDF",
+                data=f,
+                file_name=f"{st.session_state.current_chat_id}.pdf",
+                mime="application/pdf"
+        )
     for u, a in convo["chat_history"]:
         st.sidebar.markdown(f"**You:** {u}")
         st.sidebar.markdown(f"**AI:** {a}")
